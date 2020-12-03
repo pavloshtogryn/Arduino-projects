@@ -78,9 +78,10 @@ void setup() {
 
 
 void loop() { 
-    //Serial.println("S");
+    //Serial.println("loop");
     //((millis()+ delay_counter*4000) - cur_time) > 60000)
     if ( (millis() + delay_counter*4000 )> cur_time + pressure_into_mas_interval){ //allow adding to mas if spent more than 4.5 min (sleeping 5 min)
+      //Serial.println("if");
       if (i == arr_size){
         for (int j=0; j<arr_size-1;j++){ //arr_size-1
           press_mas[j]=press_mas[j+1];
@@ -109,18 +110,25 @@ void loop() {
           //Serial.print(press_mas[j]);
           //Serial.print(" ");
       }
-
+      //Serial.println(" ");
       float sum_float = sum;
       avg_press= roundf(sum_float/i);
       //Serial.print("end avg_press=");
       //Serial.println(avg_press);
-        
-      sleep_manager();
+
+      if (can_transmit_flag == 0){ //засинаємо лише якщо до цього спали
+        sleep_manager();
+      }
+      
+
+      BME280_Wake(0x76);
       
     }
 
     command_disconnect();
     //sleep_manager();
+    
+    
     
     if (millis() - cur_millis_delay_transmitt > 3000){
       cur_millis_delay_transmitt = millis();
@@ -172,7 +180,11 @@ void printValues() {
 
     Serial.println();
     */
+  }/*
+  else{
+    Serial.print("I'm awake but can't transmit");
   }
+  */
 }
 
 void command_disconnect(){
@@ -186,6 +198,8 @@ void command_disconnect(){
         //digitalWrite(13,HIGH);
         str="";
         sleep_manager();
+
+        BME280_Wake(0x76);
       }
       //else if (str=="OK+SLEEP"){
         //Serial.print("SLEEPING");
@@ -197,8 +211,11 @@ void command_disconnect(){
 }
 
 void sleep_manager(){
-
+  
   //Serial.println(" S");
+  
+  BME280_Sleep(0x76);  
+  
   delay(70);
   attachInterrupt(digitalPinToInterrupt(2), inter_handler, FALLING);
   //detachInterrupt(0);
@@ -253,3 +270,25 @@ void inter_handler () {
   break_flag = 1;
   can_transmit_flag = 1;
 }
+
+void BME280_Sleep(int device_address) {
+  // BME280 Register 0xF4 (control measurement register) sets the device mode, specifically bits 1,0
+  // The bit positions are called 'mode[1:0]'. See datasheet Table 25 and Paragraph 3.3 for more detail.
+  // Mode[1:0]  Mode
+  //    00      'Sleep'  mode
+  //  01 / 10   'Forced' mode, use either '01' or '10'
+  //    11      'Normal' mode
+  Wire.beginTransmission(device_address);
+  Wire.write((uint8_t)0xF4);       // Select Control Measurement Register
+  Wire.write((uint8_t)0b00000000); // Send '00' in bits 0-1 for Sleep mode
+  Wire.endTransmission();
+}
+
+void BME280_Wake(int device_address){
+  Wire.beginTransmission(device_address);
+  Wire.write((uint8_t)0xF4);       // Select Control Measurement Register
+  Wire.write((uint8_t)0b00100111); // Send '11' in bits 0-1 for Sleep mode and '1' in bits 2 and 5 
+                                   //for turning on temperature and pressure oversampling (without it temp and press will be 0)
+  Wire.endTransmission();
+  bme.begin(0x76, &Wire);//not neccecary
+  }
